@@ -28,6 +28,8 @@ export interface Issue {
   edits?: Edit[];
   /** For "ai" fixes: which attribute to add, and where to insert it. */
   aiRequest?: AiRequest;
+  /** Set after Claude wrote the value, so reports can ask for a human check. */
+  aiValue?: { value: string; confident: boolean };
   /** Short source snippet for reports and AI context. */
   snippet: string;
 }
