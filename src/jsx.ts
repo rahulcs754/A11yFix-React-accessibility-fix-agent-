@@ -1,6 +1,8 @@
 import type {
+  Expression,
   JSXAttribute,
   JSXElement,
+  JSXFragment,
   JSXOpeningElement,
   Node,
 } from "@babel/types";
@@ -76,25 +78,63 @@ export function hasAccessibleContent(el: JSXElement): boolean {
         if (child.value.trim()) return true;
         break;
       case "JSXExpressionContainer":
-        if (child.expression.type !== "JSXEmptyExpression") return true;
+        if (child.expression.type !== "JSXEmptyExpression" && expressionHasContent(child.expression)) return true;
         break;
       case "JSXSpreadChild":
         return true;
       case "JSXFragment":
-        // Treat fragment like a wrapper element.
-        if (hasAccessibleContent({ ...el, children: child.children } as JSXElement)) return true;
+      case "JSXElement":
+        if (jsxHasContent(child)) return true;
         break;
-      case "JSXElement": {
-        const o = child.openingElement;
-        if (hasAttr(o, "aria-label", "aria-labelledby", "title")) return true;
-        const name = elementName(o);
-        if (name === "img" && attrString(getAttr(o, "alt"))) return true;
-        // Custom components may render text we can't see; svgs/icons usually don't.
-        if (name && !isDomElement(name) && !/Icon$|^Svg|Svg$/.test(name)) return true;
-        if (hasAccessibleContent(child)) return true;
-        break;
-      }
     }
+  }
+  return false;
+}
+
+function jsxHasContent(node: JSXElement | JSXFragment): boolean {
+  // Treat a fragment like a wrapper element.
+  if (node.type === "JSXFragment") return hasAccessibleContent({ children: node.children } as JSXElement);
+  const o = node.openingElement;
+  if (hasAttr(o, "aria-label", "aria-labelledby", "title")) return true;
+  const name = elementName(o);
+  if (name === "img" && attrString(getAttr(o, "alt"))) return true;
+  // Custom components may render text we can't see; svgs/icons usually don't.
+  if (name && !isDomElement(name) && !/Icon$|^Svg|Svg$/.test(name)) return true;
+  return hasAccessibleContent(node);
+}
+
+/** `{label}` counts as content. `{open ? <XIcon /> : <MenuIcon />}` does not. */
+function expressionHasContent(e: Expression): boolean {
+  switch (e.type) {
+    case "JSXElement":
+    case "JSXFragment":
+      return jsxHasContent(e);
+    case "ConditionalExpression":
+      return expressionHasContent(e.consequent) || expressionHasContent(e.alternate);
+    case "LogicalExpression":
+      return e.operator === "&&" ? expressionHasContent(e.right) : expressionHasContent(e.left) || expressionHasContent(e.right);
+    case "NullLiteral":
+    case "BooleanLiteral":
+      return false;
+    case "StringLiteral":
+      return e.value.trim() !== "";
+    case "ParenthesizedExpression":
+      return expressionHasContent(e.expression);
+    default:
+      // Variables, calls, etc. may hold text; we can't know, so assume they do.
+      return true;
+  }
+}
+
+/** True when a child is already keyboard-usable, e.g. `<li onClick><a href>..</a></li>`. */
+export function hasInteractiveDescendant(el: JSXElement): boolean {
+  for (const child of el.children) {
+    if (child.type !== "JSXElement") continue;
+    const o = child.openingElement;
+    const name = elementName(o);
+    if (["button", "input", "select", "textarea"].includes(name)) return true;
+    if (name === "a" && hasAttr(o, "href")) return true;
+    if (hasInteractiveDescendant(child)) return true;
   }
   return false;
 }

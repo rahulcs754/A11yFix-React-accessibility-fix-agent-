@@ -48,4 +48,4 @@ TypeScript (Node 20+, ESM), `@babel/parser`, `commander`, `@anthropic-ai/sdk` (m
 - Support for Vue and Svelte
 
 ## Status
-Starter scaffold is in the repo (`src/types.ts`, `src/jsx.ts`, config files). Next: build step 1 (scanner + 8 rules + fixture tests).
+Build steps 1 to 5 are done: scanner, 8 rules, auto-fixer, CLI, Claude AI fill, PR mode, and a real-app test (see `REAL-APP-TEST.md`). Next: a live `--ai` run with an API key, then the v2 GitHub Action.
