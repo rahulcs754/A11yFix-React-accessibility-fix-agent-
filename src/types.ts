@@ -29,9 +29,11 @@ export interface Issue {
   /** For "ai" fixes: which attribute to add, and where to insert it. */
   aiRequest?: AiRequest;
   /** Set after Claude wrote the value, so reports can ask for a human check. */
-  aiValue?: { value: string; confident: boolean };
+  aiValue?: { value: string; confident: boolean; explanation?: string };
   /** Short source snippet for reports and AI context. */
   snippet: string;
+  /** Offsets of the whole opening tag, so reports can show it before and after the fix. */
+  range?: { start: number; end: number };
 }
 
 export interface AiRequest {

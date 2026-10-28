@@ -1,0 +1,88 @@
+name: A11yFix
+description: Find WCAG accessibility errors in a React / Next.js app, fix them in source code, and open one PR with a before/after report.
+author: rahulcs754
+branding:
+  icon: check-circle
+  color: blue
+
+inputs:
+  path:
+    description: Folder to scan, relative to the repo root (e.g. "src").
+    default: "."
+  urls:
+    description: Optional space-separated URLs to scan with axe-core + Playwright (needs start-command or a deployed preview).
+    default: ""
+  start-command:
+    description: Optional command that starts your app (e.g. "npm ci && npm run build && npm start"). Runs in the background before the URL scan.
+    default: ""
+  ai:
+    description: Use Claude to write alt text and labels ("true" or "false").
+    default: "true"
+  lang:
+    description: Language for <html lang>.
+    default: "en"
+  base:
+    description: Base branch for the PR. Defaults to the repo's default branch.
+    default: ""
+  anthropic-api-key:
+    description: Anthropic API key. Needed when ai is "true".
+    default: ""
+  github-token:
+    description: Token used to push the branch and open the PR.
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+
+    - name: Install A11yFix
+      shell: bash
+      run: |
+        cd "$GITHUB_ACTION_PATH"
+        npm ci --ignore-scripts
+        npm run build
+
+    - name: Install Chromium
+      if: inputs.urls != ''
+      shell: bash
+      run: cd "$GITHUB_ACTION_PATH" && npx playwright install --with-deps chromium
+
+    - name: Start app
+      if: inputs.urls != '' && inputs.start-command != ''
+      shell: bash
+      env:
+        START_COMMAND: ${{ inputs.start-command }}
+        URLS: ${{ inputs.urls }}
+      run: |
+        nohup bash -c "$START_COMMAND" > "$RUNNER_TEMP/a11yfix-app.log" 2>&1 &
+        first_url="${URLS%% *}"
+        for i in $(seq 1 120); do
+          if curl -sf -o /dev/null "$first_url"; then echo "App is up"; exit 0; fi
+          sleep 2
+        done
+        echo "App did not start. Last log lines:"; tail -50 "$RUNNER_TEMP/a11yfix-app.log"; exit 1
+
+    - name: Fix and open PR
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        SCAN_PATH: ${{ inputs.path }}
+        URLS: ${{ inputs.urls }}
+        AI: ${{ inputs.ai }}
+        LANG_CODE: ${{ inputs.lang }}
+        BASE: ${{ inputs.base }}
+      run: |
+        git config user.email >/dev/null || {
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        }
+        args=(fix "$SCAN_PATH" --pr --lang "$LANG_CODE" --report "$RUNNER_TEMP/a11yfix-report.md")
+        if [ -n "$URLS" ]; then args+=(--url $URLS); fi
+        if [ "$AI" = "true" ]; then args+=(--ai); fi
+        if [ -n "$BASE" ]; then args+=(--base "$BASE"); fi
+        node "$GITHUB_ACTION_PATH/dist/cli.js" "${args[@]}"
+        if [ -f "$RUNNER_TEMP/a11yfix-report.md" ]; then cat "$RUNNER_TEMP/a11yfix-report.md" >> "$GITHUB_STEP_SUMMARY"; fi

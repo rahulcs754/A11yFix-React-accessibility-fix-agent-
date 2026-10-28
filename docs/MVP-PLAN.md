@@ -48,4 +48,4 @@ TypeScript (Node 20+, ESM), `@babel/parser`, `commander`, `@anthropic-ai/sdk` (m
 - Support for Vue and Svelte
 
 ## Status
-Build steps 1 to 5 are done: scanner, 8 rules, auto-fixer, CLI, Claude AI fill, PR mode, and a real-app test (see `REAL-APP-TEST.md`). Next: a live `--ai` run with an API key, then the v2 GitHub Action.
+Build steps 1 to 5 are done: scanner, 8 rules, auto-fixer, CLI, Claude AI fill, PR mode, and a real-app test (see `REAL-APP-TEST.md`). Also done: `link-name` rule, `--url` live scan with axe-core + Playwright (incl. color contrast), explanations and before/after in the PR report, and the GitHub Action. Next: a live `--ai` run with an API key, then publish to npm.
