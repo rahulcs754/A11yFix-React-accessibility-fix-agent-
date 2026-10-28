@@ -55,7 +55,10 @@ Node 20+, ESM, TypeScript, `@babel/parser` + `@babel/types`, `commander`, `picoc
 - `src/jsx.ts`: JSX walker and attribute helpers
 - `src/edits.ts`: attribute insert points and applying edits
 - `src/fix.ts`, `src/ai.ts`, `src/report.ts`, `src/pr.ts`, `src/cli.ts`
+- `src/runtime.ts`: `--url` scan with axe-core + Playwright, maps errors to JSX file:line, contrast suggestions
+- `src/explain.ts`: short explanation per rule for the PR report
+- `action.yml` + `docs/GITHUB-ACTION.md`: GitHub Action that opens one PR per run
 - `test/`: rule tests, fixture app, AI tests with a stubbed client
 - `docs/REAL-APP-TEST.md`: results on two open-source apps
 
-Next: a live `--ai` run with an API key, then the v2 GitHub Action.
+Next: a live `--ai` run with an API key, then publish to npm so `npx a11yfix` works.
