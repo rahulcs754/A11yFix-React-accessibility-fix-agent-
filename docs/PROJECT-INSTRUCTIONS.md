@@ -50,8 +50,12 @@ Node 20+, ESM, TypeScript, `@babel/parser` + `@babel/types`, `commander`, `picoc
 - Vue and Svelte support
 
 ## What exists now
-- `package.json`, `tsconfig.json`, `.gitignore`
-- `src/types.ts`: `Issue`, `Edit`, `Rule`, `RuleContext` types
-- `src/jsx.ts`: JSX tree walker and attribute helpers (`getAttr`, `attrString`, `attrNumber`, `hasAccessibleContent`, ...)
+- `src/scan.ts`: finds files, parses them, runs the rules
+- `src/rules/`: one file per rule
+- `src/jsx.ts`: JSX walker and attribute helpers
+- `src/edits.ts`: attribute insert points and applying edits
+- `src/fix.ts`, `src/ai.ts`, `src/report.ts`, `src/pr.ts`, `src/cli.ts`
+- `test/`: rule tests, fixture app, AI tests with a stubbed client
+- `docs/REAL-APP-TEST.md`: results on two open-source apps
 
-Next step: build step 1.
+Next: a live `--ai` run with an API key, then the v2 GitHub Action.
