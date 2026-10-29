@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { Command } from "commander";
@@ -7,10 +8,13 @@ import { aiFillFile } from "./ai.js";
 import { applyFixes } from "./fix.js";
 import { openPullRequest } from "./pr.js";
 import { markdownReport, printConsole, summarize } from "./report.js";
+import { linkToStaticIssues, runtimeScan, type RuntimeIssue } from "./runtime.js";
 import { scanDir } from "./scan.js";
 
+const urlsHelp = "also load these URLs in Chromium and run axe-core (contrast, alt, labels, names, lang)";
+
 const program = new Command()
-  .name("a11y-fix")
+  .name("a11yfix")
   .description("Find WCAG accessibility errors in React code, fix them, and open a PR.")
   .version("0.1.0");
 
@@ -20,12 +24,17 @@ program
   .argument("[dir]", "folder to scan", ".")
   .option("--json", "print JSON instead of text")
   .option("--lang <lang>", "language for <html lang>", "en")
-  .action(async (dir: string, opts: { json?: boolean; lang: string }) => {
+  .option("-u, --url <urls...>", urlsHelp)
+  .option("--report <file>", "also write the Markdown report to a file")
+  .action(async (dir: string, opts: { json?: boolean; lang: string; url?: string[]; report?: string }) => {
     const root = path.resolve(dir);
     const results = await scanDir(root, { lang: opts.lang });
-    if (opts.json) printJson(results, root);
-    else printConsole(results, root, "scan");
-    if (summarize(results).issues > 0) process.exitCode = 1;
+    const runtime = opts.url?.length ? await runtimeScan(opts.url, root) : [];
+    linkToStaticIssues(runtime, results.flatMap((r) => r.issues));
+    if (opts.json) printJson(results, root, runtime);
+    else printConsole(results, root, "scan", runtime);
+    if (opts.report) await writeFile(opts.report, markdownReport(results, root, runtime, false));
+    if (summarize(results).issues > 0 || runtime.length > 0) process.exitCode = 1;
   });
 
 program
@@ -38,9 +47,13 @@ program
   .option("--dry-run", "show what would change without writing files")
   .option("--json", "print JSON instead of text")
   .option("--lang <lang>", "language for <html lang>", "en")
-  .action(async (dir: string, opts: { ai?: boolean; pr?: boolean; base?: string; dryRun?: boolean; json?: boolean; lang: string }) => {
+  .option("-u, --url <urls...>", urlsHelp)
+  .option("--report <file>", "also write the Markdown report to a file")
+  .action(async (dir: string, opts: FixOptions) => {
     const root = path.resolve(dir);
     const results = await scanDir(root, { lang: opts.lang });
+    const runtime = opts.url?.length ? await runtimeScan(opts.url, root) : [];
+    linkToStaticIssues(runtime, results.flatMap((r) => r.issues));
 
     if (opts.ai) {
       const client = new Anthropic();
@@ -56,11 +69,13 @@ program
     }
 
     const fixed = await applyFixes(results, { dryRun: opts.dryRun });
-    if (opts.json) printJson(results, root);
+    if (opts.json) printJson(results, root, runtime);
     else {
-      printConsole(results, root, "fix");
+      printConsole(results, root, "fix", runtime);
       if (opts.dryRun) console.log(pc.dim("Dry run: no files were changed."));
     }
+
+    if (opts.report) await writeFile(opts.report, markdownReport(results, root, runtime, !opts.dryRun));
 
     if (opts.pr && !opts.dryRun) {
       if (fixed.length === 0) {
@@ -72,18 +87,29 @@ program
         cwd: root,
         files: fixed.map((f) => f.file),
         title: `fix(a11y): fix ${s.fixed} accessibility issue${s.fixed === 1 ? "" : "s"}`,
-        body: markdownReport(results, root),
+        body: markdownReport(results, root, runtime),
         base: opts.base,
       });
       console.log(pc.green(`PR opened: ${url}`));
     }
   });
 
-function printJson(results: Awaited<ReturnType<typeof scanDir>>, root: string): void {
+interface FixOptions {
+  ai?: boolean;
+  pr?: boolean;
+  base?: string;
+  dryRun?: boolean;
+  json?: boolean;
+  lang: string;
+  url?: string[];
+  report?: string;
+}
+
+function printJson(results: Awaited<ReturnType<typeof scanDir>>, root: string, runtime: RuntimeIssue[] = []): void {
   const issues = results.flatMap((r) =>
-    r.issues.map(({ edits, aiRequest, ...i }) => ({ ...i, file: path.relative(root, r.file), fixed: Boolean(edits?.length) })),
+    r.issues.map(({ edits, aiRequest, range, ...i }) => ({ ...i, file: path.relative(root, r.file), fixed: Boolean(edits?.length) })),
   );
-  console.log(JSON.stringify({ summary: summarize(results), issues }, null, 2));
+  console.log(JSON.stringify({ summary: summarize(results), issues, runtime }, null, 2));
 }
 
 program.parseAsync().catch((err: Error) => {
