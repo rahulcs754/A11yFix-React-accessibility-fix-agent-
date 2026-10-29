@@ -22,7 +22,7 @@ describe("aiFillFile", () => {
     const issues = scanSource("A.tsx", src);
     const { client, parse } = stubClient([
       { id: 0, value: "Our team at the 2025 offsite", confident: true },
-      { id: 1, value: "Close dialog", confident: true },
+      { id: 1, value: "Close dialog", confident: true, explanation: "The handler is named close." },
       { id: 2, value: "", confident: false },
     ]);
     const filled = await aiFillFile(client, "A.tsx", src, issues);
@@ -40,6 +40,7 @@ describe("aiFillFile", () => {
     // Decorative image gets alt="".
     expect(out).toContain(`<img alt="" src="/bg.png" />`);
     expect(scanSource("A.tsx", out)).toEqual([]);
+    expect(issues[1].aiValue?.explanation).toBe("The handler is named close.");
   });
 
   it("never inserts an empty aria-label, and ignores unknown ids", async () => {

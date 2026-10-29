@@ -109,3 +109,42 @@ describe("fixture app", () => {
     expect(md).not.toMatch(/\| <(div|input|a|textarea)/);
   });
 });
+
+describe("link-name and report", () => {
+  it("link-name: flags icon-only links, skips links with text or a label", () => {
+    expect(ids(`<a href="/gh"><GithubIcon /></a>`)).toEqual(["link-name"]);
+    expect(ids(`<Link href="/gh"><svg /></Link>`)).toEqual(["link-name"]);
+    expect(ids(`<a href="/gh">GitHub</a>`)).toEqual([]);
+    expect(ids(`<a href="/gh" aria-label="GitHub"><GithubIcon /></a>`)).toEqual([]);
+    expect(ids(`<a href="/gh">{name}</a>`)).toEqual([]);
+  });
+
+  it("shows before/after and an explanation for each fix", () => {
+    const source = `<html><div tabIndex={2}>Skip</div></html>`;
+    const results = [{ file: "/r/a.tsx", source, issues: scanSource("a.tsx", source) }];
+    const md = markdownReport(results, "/r");
+    expect(md).toContain("Before / after");
+    expect(md).toContain('```tsx\n<html lang="en">\n```');
+    expect(md).toContain("```tsx\n<div tabIndex={0}>\n```");
+    expect(md).toContain("Screen readers need the page language");
+  });
+
+  it("adds axe-core results with a contrast suggestion", () => {
+    const md = markdownReport([], "/r", [
+      {
+        url: "http://localhost:3000/",
+        axeRule: "color-contrast",
+        impact: "serious",
+        help: "Elements must meet minimum color contrast ratio thresholds",
+        helpUrl: "https://dequeuniversity.com/rules/axe/4.11/color-contrast",
+        html: '<p class="muted">Hi</p>',
+        selector: ".muted",
+        source: { file: "/r/a.tsx", line: 3, how: "search" },
+        contrast: { fg: "#aaaaaa", bg: "#ffffff", ratio: 2.32, expected: 4.5, suggestedFg: "#747474" },
+      },
+    ]);
+    expect(md).toContain("Found on the running page (axe-core)");
+    expect(md).toContain("`a.tsx:3`");
+    expect(md).toContain("Closest passing text color: #747474");
+  });
+});

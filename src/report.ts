@@ -1,5 +1,8 @@
 import path from "node:path";
 import pc from "picocolors";
+import { applyEdits } from "./edits.js";
+import { EXPLANATIONS } from "./explain.js";
+import type { RuntimeIssue } from "./runtime.js";
 import type { FileResult } from "./scan.js";
 import type { Issue } from "./types.js";
 
@@ -31,7 +34,7 @@ function status(i: Issue): string {
   return "not fixed";
 }
 
-export function printConsole(results: FileResult[], root: string, mode: "scan" | "fix"): void {
+export function printConsole(results: FileResult[], root: string, mode: "scan" | "fix", runtime: RuntimeIssue[] = []): void {
   for (const r of results) {
     if (r.error) {
       console.log(pc.yellow(`! ${path.relative(root, r.file)}: could not parse (${r.error.split("\n")[0]})`));
@@ -45,8 +48,21 @@ export function printConsole(results: FileResult[], root: string, mode: "scan" |
     }
     console.log();
   }
+  if (runtime.length) {
+    console.log(pc.underline("Running page (axe-core)"));
+    for (const r of runtime) {
+      const where = r.source ? path.relative(root, path.resolve(r.source.file)) + `:${r.source.line}` : pc.dim("source not found");
+      const c = r.contrast;
+      const extra = c
+        ? ` ${c.fg} on ${c.bg} is ${c.ratio}:1, needs ${c.expected}:1` + (c.suggestedFg ? pc.cyan(` -> try ${c.suggestedFg}`) : "")
+        : "";
+      console.log(`  ${pc.red(r.axeRule)} ${r.help}${extra} ${pc.dim(r.url)} ${where}`);
+    }
+    console.log();
+  }
   const s = summarize(results);
   const parts = [`${s.issues} issue(s) in ${s.files} file(s)`];
+  if (runtime.length) parts.push(`${runtime.length} on the running page`);
   if (mode === "fix") parts.push(pc.green(`${s.fixed} fixed`));
   if (s.needsAi) parts.push(`${s.needsAi} need --ai`);
   if (s.manual) parts.push(`${s.manual} need a manual fix`);
@@ -58,17 +74,36 @@ export function printConsole(results: FileResult[], root: string, mode: "scan" |
 const cell = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\|/g, "\\|").replace(/\n/g, " ");
 
-/** Markdown body for the pull request. */
-export function markdownReport(results: FileResult[], root: string): string {
+/** The opening tag after this issue's own edits, for before/after views. */
+export function tagAfter(issue: Issue, source: string): string | undefined {
+  if (!issue.edits?.length || !issue.range) return undefined;
+  const { start, end } = issue.range;
+  const local = issue.edits
+    .filter((e) => e.start >= start && e.end <= end)
+    .map((e) => ({ ...e, start: e.start - start, end: e.end - start }));
+  return applyEdits(source.slice(start, end), local).output;
+}
+
+const fence = (code: string) => "```tsx\n" + (code.length > 600 ? `${code.slice(0, 597)}...` : code) + "\n```";
+
+function explanation(i: Issue): string {
+  const parts = [EXPLANATIONS[i.ruleId] ?? ""];
+  if (i.aiValue?.explanation) parts.push(`Claude: ${i.aiValue.explanation}`);
+  return parts.filter(Boolean).join(" ");
+}
+
+/** Markdown body for the pull request: summary, before/after for every fix, open issues, and axe results. */
+export function markdownReport(results: FileResult[], root: string, runtime: RuntimeIssue[] = [], applied = true): string {
   const s = summarize(results);
-  const all = results.flatMap((r) => r.issues.map((i) => ({ ...i, rel: path.relative(root, r.file) })));
+  const all = results.flatMap((r) => r.issues.map((i) => ({ ...i, rel: path.relative(root, r.file), source: r.source })));
   const fixed = all.filter((i) => i.edits?.length);
   const open = all.filter((i) => !i.edits?.length);
 
   const lines = [
     "## Accessibility fixes by A11yFix",
     "",
-    `Found **${s.issues}** WCAG issue(s) and fixed **${s.fixed}**.`,
+    `Found **${s.issues}** WCAG issue(s) in source and ${applied ? "fixed" : "can fix"} **${s.fixed}**.` +
+      (runtime.length ? ` axe-core found **${runtime.length}** on the running page.` : ""),
     "",
   ];
   if (fixed.length) {
@@ -79,12 +114,40 @@ export function markdownReport(results: FileResult[], root: string): string {
         : i.message;
       lines.push(`| \`${i.rel}:${i.line}\` | ${i.ruleId} | ${i.wcag} | ${cell(change)} |`);
     }
-    lines.push("");
+    lines.push("", "<details><summary>Before / after for each fix</summary>", "");
+    for (const i of fixed) {
+      const { source } = i;
+      lines.push(`#### \`${i.rel}:${i.line}\` ${i.ruleId} (WCAG ${i.wcag})`, "");
+      const why = explanation(i);
+      if (why) lines.push(why, "");
+      const after = tagAfter(i, source);
+      if (i.range && after !== undefined) {
+        lines.push("Before:", fence(source.slice(i.range.start, i.range.end)), "After:", fence(after), "");
+      }
+    }
+    lines.push("</details>", "");
   }
   if (open.length) {
     lines.push("### Still open (needs a person)", "", "| File | Rule | WCAG | Issue |", "|---|---|---|---|");
     for (const i of open) lines.push(`| \`${i.rel}:${i.line}\` | ${i.ruleId} | ${i.wcag} | ${cell(i.message)} |`);
     lines.push("");
+  }
+  if (runtime.length) {
+    lines.push("### Found on the running page (axe-core)", "", "| Rule | Page | Element | Source | Note |", "|---|---|---|---|---|");
+    for (const r of runtime) {
+      const where = r.source ? `\`${path.relative(root, path.resolve(r.source.file))}:${r.source.line}\`` : "not found";
+      const c = r.contrast;
+      const note = c
+        ? `${c.fg} on ${c.bg} is ${c.ratio}:1, needs ${c.expected}:1` + (c.suggestedFg ? `. Closest passing text color: ${c.suggestedFg}` : "")
+        : r.ruleId
+          ? `source rule: ${r.ruleId}`
+          : "";
+      lines.push(`| [${r.axeRule}](${r.helpUrl}) | ${cell(r.url)} | ${cell(r.html.slice(0, 80))} | ${where} | ${cell(note)} |`);
+    }
+    lines.push("");
+    if (runtime.some((r) => r.contrast)) {
+      lines.push("> Colors are not changed automatically, because that is a design decision. The suggested color is the closest one that passes.", "");
+    }
   }
   if (fixed.some((i) => i.aiValue)) {
     lines.push("> Values marked **AI** were written by Claude from the code around them. Please check that they match what users see.", "");
