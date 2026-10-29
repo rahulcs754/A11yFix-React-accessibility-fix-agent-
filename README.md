@@ -1,26 +1,77 @@
 # A11yFix
 
-Finds WCAG accessibility errors in React / Next.js code, fixes them in place, and opens a PR.
+**Finds accessibility (WCAG) errors in your React / Next.js app, fixes them in the source code, and opens a pull request.**
 
-Tools like axe and eslint-plugin-jsx-a11y tell you what's wrong. A11yFix also changes the code: safe fixes are applied directly, and Claude writes the parts that need words (alt text, labels).
+Most tools (axe, Lighthouse, eslint-plugin-jsx-a11y) only give you a list of problems. A11yFix also writes the fix: safe fixes are applied directly, and Claude writes the parts that need words, such as alt text and labels. You review one small PR instead of fixing 50 issues by hand.
 
-## Quick start
-```bash
-npm install
-npm run build
+## Why it matters
+- **Most sites fail.** 94.8% of the top 1 million home pages have WCAG errors (WebAIM Million). Missing alt text, empty buttons, unlabeled inputs and low contrast are the most common.
+- **It is now the law in the EU.** The European Accessibility Act has applied since June 2025. Many products sold in the EU must meet WCAG, and fines are possible.
+- **Overlays don't fix it.** Accessibility overlay widgets patch the page at runtime and are widely criticized. A11yFix changes the real code, so the fix is permanent and works without extra JavaScript.
 
-npx a11yfix scan ./src                       # same as: node dist/cli.js scan ./src
-node dist/cli.js scan ./src                  # report only (exit code 1 if issues)
-node dist/cli.js scan ./src --url http://localhost:3000/   # also run axe-core on the live page
-node dist/cli.js fix ./src --dry-run         # show what would change
-node dist/cli.js fix ./src                   # apply safe fixes
-ANTHROPIC_API_KEY=... node dist/cli.js fix ./src --ai        # also write alt text and labels
-ANTHROPIC_API_KEY=... node dist/cli.js fix ./src --ai --pr   # also open a GitHub PR
+## Benefits
+- **Saves time:** finds and fixes common issues in minutes, not days of manual audit work.
+- **Real code fixes:** small, reviewable edits in your JSX. Formatting, tags and styles are never changed.
+- **Points to the exact line:** every issue, including ones found on the live page, is mapped to a file and line.
+- **Explains each fix:** the PR says why each change was needed, with before/after code, so the team learns too.
+- **Safe by default:** run `scan` or `--dry-run` first. Nothing changes until you say so, and every change goes through a normal PR review.
+- **Runs anywhere:** on your laptop, in CI, or as a GitHub Action on a schedule.
+
+## Use cases
+1. **Before a launch or audit:** run it once on the whole app to clear the common WCAG errors before a manual audit.
+2. **EU compliance:** a quick first step toward meeting the European Accessibility Act for products sold in the EU.
+3. **Keep it fixed:** run the GitHub Action weekly so new issues are fixed in a PR automatically.
+4. **Agencies and freelancers:** scan a client's React site and hand over a PR with fixes and a clear report.
+5. **Learning:** each PR explains the WCAG rule behind every change, which helps a team build accessibility habits.
+
+## Example
+Before:
+```tsx
+<button onClick={() => setOpen(false)}><XIcon /></button>
+<input type="email" placeholder="Email address" />
+<html>
+```
+After `a11yfix fix ./src --ai`:
+```tsx
+<button aria-label="Close dialog" onClick={() => setOpen(false)}><XIcon /></button>
+<input aria-label="Email address" type="email" placeholder="Email address" />
+<html lang="en">
 ```
 
-`--pr` needs `git` and the GitHub CLI (`gh auth login`). It creates an `a11y-fix/<timestamp>` branch, commits only the fixed files, pushes, and opens a PR with a report table. You are left on the new branch.
+## How to use
+
+### 1. Install
+Not on npm yet, so install it from GitHub:
+```bash
+git clone https://github.com/rahulcs754/A11yFix-React-accessibility-fix-agent-.git a11yfix
+cd a11yfix
+npm install
+npm run build
+npm link            # makes the `a11yfix` command available everywhere
+```
+
+### 2. Scan your app (no changes)
+```bash
+cd your-react-app
+a11yfix scan ./src                                  # source code check
+a11yfix scan ./src --url http://localhost:3000/     # also check the running page (adds color contrast)
+```
+The `--url` scan needs Chromium once: `npx playwright install chromium`.
+
+### 3. Fix
+```bash
+a11yfix fix ./src --dry-run                 # preview what would change
+a11yfix fix ./src                           # apply safe fixes (no AI needed)
+export ANTHROPIC_API_KEY=sk-ant-...
+a11yfix fix ./src --ai                      # also let Claude write alt text, labels and titles
+a11yfix fix ./src --ai --pr                 # also open a GitHub PR with the report
+```
+`--pr` needs `git` and the GitHub CLI (`gh auth login`). It creates an `a11y-fix/<timestamp>` branch, commits only the fixed files, pushes, and opens a PR. You are left on the new branch.
 
 Other options: `--json` for machine-readable output, `--report <file>` to save the Markdown report, `--lang <code>` for `<html lang>`, `--base <branch>` for the PR base.
+
+### 4. Automate with the GitHub Action
+Add a workflow that runs A11yFix every week and opens one PR per run. Setup and a ready-to-copy workflow are in [docs/GITHUB-ACTION.md](docs/GITHUB-ACTION.md).
 
 ## Live page scan (axe-core + Playwright)
 `--url <urls...>` loads each page in headless Chromium and runs axe-core for the MVP error types: color contrast, image alt, form labels, empty links, empty buttons, page language (and iframe titles). Each error is mapped back to a JSX file and line:
@@ -29,9 +80,6 @@ Other options: `--json` for machine-readable output, `--report <file>` to save t
 3. Otherwise: the one source issue with the same rule and tag.
 
 Color contrast is reported with the closest passing text color, but not changed automatically, because colors are a design decision. Needs Chromium: `npx playwright install chromium` (or set `A11YFIX_CHROMIUM_PATH`).
-
-## GitHub Action
-Runs the fixer in CI and opens one PR per run with a before/after report. See [docs/GITHUB-ACTION.md](docs/GITHUB-ACTION.md).
 
 ## PR report
 Each PR has a table of fixes, a short explanation and a before/after snippet for every fix (with Claude's reason for AI values), the issues that still need a person, and the axe-core results with their source lines.
