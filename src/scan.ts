@@ -66,6 +66,7 @@ export function scanSource(
           line: opening.loc!.start.line,
           column: opening.loc!.start.column + 1,
           snippet: snippet.length > 240 ? `${snippet.slice(0, 237)}...` : snippet,
+          range: { start: opening.start!, end: opening.end! },
         });
       }
     }

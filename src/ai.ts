@@ -13,6 +13,8 @@ const FixesSchema = z.object({
       value: z.string(),
       /** False when the code gives too little context to be sure. Shown in the report. */
       confident: z.boolean(),
+      /** One sentence for the PR on why this value fits. */
+      explanation: z.string(),
     }),
   ),
 });
@@ -25,6 +27,7 @@ Rules:
 - Use the same language as the visible text in the file.
 - For alt on a purely decorative image, return "". Never return "" for aria-label or title.
 - Set confident to false when the code gives too little context to be sure. Still give your best value.
+- Give a one-sentence explanation of why the value fits, based on what you saw in the code.
 - Return exactly one fix for every issue id you are given.`;
 
 /**
@@ -64,7 +67,7 @@ export async function aiFillFile(client: Anthropic, file: string, source: string
     const value = fix.value.trim();
     if (!value && attribute !== "alt") continue;
     issue.edits = [insert(insertAt, jsxAttr(attribute, value))];
-    issue.aiValue = { value, confident: fix.confident };
+    issue.aiValue = { value, confident: fix.confident, explanation: fix.explanation };
     filled.push(issue);
   }
   return filled;

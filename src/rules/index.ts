@@ -6,11 +6,13 @@ import { htmlLang } from "./html-lang.js";
 import { iframeTitle } from "./iframe-title.js";
 import { imgAlt } from "./img-alt.js";
 import { inputLabel } from "./input-label.js";
+import { linkName } from "./link-name.js";
 import { noPositiveTabindex } from "./no-positive-tabindex.js";
 
 export const rules: Rule[] = [
   imgAlt,
   buttonName,
+  linkName,
   clickKeyboard,
   anchorIsValid,
   inputLabel,
