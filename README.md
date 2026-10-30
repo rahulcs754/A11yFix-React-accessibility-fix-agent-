@@ -115,7 +115,6 @@ See [docs/REAL-APP-TEST.md](docs/REAL-APP-TEST.md).
 
 ## Docs
 - [Project instructions](docs/PROJECT-INSTRUCTIONS.md)
-- [MVP plan](docs/MVP-PLAN.md)
 
 ## Development
 ```bash
