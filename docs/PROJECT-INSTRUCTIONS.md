@@ -61,4 +61,4 @@ Node 20+, ESM, TypeScript, `@babel/parser` + `@babel/types`, `commander`, `picoc
 - `test/`: rule tests, fixture app, AI tests with a stubbed client
 - `docs/REAL-APP-TEST.md`: results on two open-source apps
 
-Next: a live `--ai` run with an API key, then publish to npm so `npx a11yfix` works.
+Next: a live `--ai` run with an API key, then publish to npm as `@rahulcs754/a11yfix` (see `PUBLISHING.md`; the plain `a11yfix` name is taken).
